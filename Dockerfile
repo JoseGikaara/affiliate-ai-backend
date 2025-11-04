@@ -15,9 +15,22 @@ RUN apk add --no-cache \
     postgresql-dev \
     mysql-client \
     mariadb-client \
-    && docker-php-ext-install pdo_mysql pdo_pgsql mbstring exif pcntl bcmath gd \
-    && docker-php-ext-configure gd --with-freetype --with-jpeg \
-    && docker-php-ext-install -j$(nproc) gd
+    freetype-dev \
+    libjpeg-turbo-dev \
+    && export JPEG_CFLAGS="-I/usr/include" \
+    && export JPEG_LIBS="-L/usr/lib -ljpeg" \
+    && docker-php-ext-configure gd \
+        --with-freetype=/usr/include/freetype2 \
+        --with-jpeg=/usr/include \
+        --with-png \
+    && docker-php-ext-install -j$(nproc) \
+        pdo_mysql \
+        pdo_pgsql \
+        mbstring \
+        exif \
+        pcntl \
+        bcmath \
+        gd
 
 # Install Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
@@ -62,6 +75,7 @@ RUN echo 'server { \
     \
     location ~ \.php$ { \
         fastcgi_pass 127.0.0.1:9000; \
+        fastcgi_index index.php; \
         fastcgi_param SCRIPT_FILENAME $realpath_root$fastcgi_script_name; \
         include fastcgi_params; \
     } \
@@ -70,6 +84,10 @@ RUN echo 'server { \
         deny all; \
     } \
 }' > /etc/nginx/conf.d/default.conf
+
+# Configure PHP-FPM to listen on TCP
+RUN sed -i 's/listen = .*/listen = 127.0.0.1:9000/' /usr/local/etc/php-fpm.d/www.conf \
+    && sed -i 's/;clear_env = no/clear_env = no/' /usr/local/etc/php-fpm.d/www.conf
 
 # Copy supervisor configuration
 RUN echo '[supervisord] \
@@ -102,12 +120,16 @@ stderr_logfile=/dev/stderr \
 stderr_logfile_maxbytes=0 \
 user=www-data' > /etc/supervisor/conf.d/supervisord.conf
 
+# Copy entrypoint script
+COPY docker-entrypoint.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
 # Expose port
 EXPOSE 80
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
-  CMD curl -f http://localhost/up || exit 1
+  CMD curl -f http://localhost/ || exit 1
 
-# Start supervisor
-CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
+# Use entrypoint script to run migrations and start services
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]

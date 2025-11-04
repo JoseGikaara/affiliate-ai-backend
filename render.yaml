@@ -2,21 +2,26 @@
 services:
   - type: web
     name: affiliate-ai-backend
-    runtime: php
-    plan: starter
+    env: docker
+    plan: free
+    branch: main
+    autoDeploy: true
     region: oregon
+
     envVars:
+      # Application
       - key: APP_ENV
         value: production
+      - key: APP_KEY
+        generateValue: true
       - key: APP_DEBUG
         value: false
-      - key: LOG_CHANNEL
-        value: stderr
-      - key: LOG_LEVEL
-        value: error
-      - key: DB_CONNECTION
-        value: pgsql
+      - key: APP_URL
         sync: false
+      
+      # Database - MySQL
+      - key: DB_CONNECTION
+        value: mysql
       - key: DB_HOST
         fromDatabase:
           name: affiliate-ai-db
@@ -37,18 +42,15 @@ services:
         fromDatabase:
           name: affiliate-ai-db
           property: password
-      # Application Key - will be generated automatically
-      - key: APP_KEY
-        generateValue: true
-      # Application URL - set this to your Render service URL
-      - key: APP_URL
-        sync: false
+      
       # Frontend URL - set this to your frontend deployment URL
       - key: FRONTEND_URL
         sync: false
+      
       # OpenAI API Key - required for AI features
       - key: OPENAI_API_KEY
         sync: false
+      
       # PayPal Configuration (optional)
       - key: PAYPAL_CLIENT_ID
         sync: false
@@ -56,23 +58,30 @@ services:
         sync: false
       - key: PAYPAL_ENV
         value: sandbox
+      
       # Queue Configuration
       - key: QUEUE_CONNECTION
         value: database
+      
       # Session Configuration
       - key: SESSION_DRIVER
         value: database
+      
       # Cache Configuration
       - key: CACHE_STORE
         value: database
-    buildCommand: composer install --no-dev --optimize-autoloader && php artisan migrate --force && php artisan config:cache && php artisan route:cache && php artisan view:cache
-    startCommand: php artisan serve --host 0.0.0.0 --port $PORT
+      
+      # Logging
+      - key: LOG_CHANNEL
+        value: stderr
+      - key: LOG_LEVEL
+        value: error
 
+  # Cron job for Laravel scheduler
   - type: cron
     name: affiliate-ai-scheduler
-    runtime: php
-    plan: starter
-    region: oregon
+    env: docker
+    plan: free
     schedule: "*/5 * * * *"
     command: php artisan schedule:run
     envVars:
@@ -81,9 +90,10 @@ services:
           name: affiliate-ai-backend
           property: envVars
 
+# MySQL Database
 databases:
   - name: affiliate-ai-db
     databaseName: affiliate_ai
     user: affiliate_ai_user
-    plan: starter
+    plan: free
     region: oregon
