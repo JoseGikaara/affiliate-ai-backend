@@ -1,0 +1,17 @@
+// Add after line 438, before return response()->json
+        // Total revenue from top-ups (in KSh)
+        $totalRevenue = TopUpRequest::where('status', 'approved')
+            ->sum('amount');
+
+        return response()->json([
+            'total_users' => $totalUsers,
+            'total_affiliates' => $totalAffiliates,
+            'active_offers' => $activeOffers,
+            'total_landing_pages' => $totalLandingPages,
+            'total_clicks' => (int) $totalClicks,
+            'total_conversions' => (int) $totalConversions,
+            'total_credits_issued' => (int) $totalCreditsIssued,
+            'total_credits_used' => (int) $totalCreditsUsed,
+            'total_revenue' => (int) $totalRevenue,
+        ]);
+
