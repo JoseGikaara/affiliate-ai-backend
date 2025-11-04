@@ -3,6 +3,7 @@
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\DB;
 
 return new class extends Migration
 {
@@ -12,77 +13,58 @@ return new class extends Migration
     public function up(): void
     {
         // Add indexes for affiliate_links table
-        Schema::table('affiliate_links', function (Blueprint $table) {
-            if (!$this->hasIndex('affiliate_links', 'affiliate_links_affiliate_id_index')) {
-                $table->index('affiliate_id');
-            }
-            if (!$this->hasIndex('affiliate_links', 'affiliate_links_offer_id_index')) {
-                $table->index('offer_id');
-            }
-            if (!$this->hasIndex('affiliate_links', 'affiliate_links_tracking_id_index')) {
-                $table->index('tracking_id');
-            }
-        });
+        $this->safeAddIndex('affiliate_links', 'affiliate_id');
+        $this->safeAddIndex('affiliate_links', 'offer_id');
+        $this->safeAddIndex('affiliate_links', 'tracking_id');
 
         // Add indexes for affiliates table
-        Schema::table('affiliates', function (Blueprint $table) {
-            if (!$this->hasIndex('affiliates', 'affiliates_user_id_index')) {
-                $table->index('user_id');
-            }
-            if (!$this->hasIndex('affiliates', 'affiliates_status_index')) {
-                $table->index('status');
-            }
-            if (!$this->hasIndex('affiliates', 'affiliates_referral_id_index')) {
-                $table->index('referral_id');
-            }
-        });
+        $this->safeAddIndex('affiliates', 'user_id');
+        $this->safeAddIndex('affiliates', 'status');
+        $this->safeAddIndex('affiliates', 'referral_id');
 
         // Add indexes for conversions table
         if (Schema::hasTable('conversions')) {
-            Schema::table('conversions', function (Blueprint $table) {
-                if (!$this->hasIndex('conversions', 'conversions_affiliate_id_index')) {
-                    $table->index('affiliate_id');
-                }
-                if (!$this->hasIndex('conversions', 'conversions_offer_id_index')) {
-                    $table->index('offer_id');
-                }
-                if (!$this->hasIndex('conversions', 'conversions_affiliate_link_id_index')) {
-                    $table->index('affiliate_link_id');
-                }
-                if (!$this->hasIndex('conversions', 'conversions_status_index')) {
-                    $table->index('status');
-                }
-                if (!$this->hasIndex('conversions', 'conversions_created_at_index')) {
-                    $table->index('created_at');
-                }
-            });
+            $this->safeAddIndex('conversions', 'affiliate_id');
+            $this->safeAddIndex('conversions', 'offer_id');
+            $this->safeAddIndex('conversions', 'affiliate_link_id');
+            $this->safeAddIndex('conversions', 'status');
+            $this->safeAddIndex('conversions', 'created_at');
         }
 
         // Add indexes for commissions table
         if (Schema::hasTable('commissions')) {
-            Schema::table('commissions', function (Blueprint $table) {
-                if (!$this->hasIndex('commissions', 'commissions_affiliate_id_index')) {
-                    $table->index('affiliate_id');
-                }
-                if (!$this->hasIndex('commissions', 'commissions_offer_id_index')) {
-                    $table->index('offer_id');
-                }
-                if (!$this->hasIndex('commissions', 'commissions_status_index')) {
-                    $table->index('status');
-                }
-                if (!$this->hasIndex('commissions', 'commissions_date_index')) {
-                    $table->index('date');
-                }
-            });
+            $this->safeAddIndex('commissions', 'affiliate_id');
+            $this->safeAddIndex('commissions', 'offer_id');
+            $this->safeAddIndex('commissions', 'status');
+            $this->safeAddIndex('commissions', 'date');
         }
 
         // Add indexes for offers table
         if (Schema::hasTable('offers')) {
-            Schema::table('offers', function (Blueprint $table) {
-                if (!$this->hasIndex('offers', 'offers_status_index')) {
-                    $table->index('status');
-                }
-            });
+            $this->safeAddIndex('offers', 'status');
+        }
+    }
+
+    /**
+     * Safely add an index if it doesn't exist
+     */
+    private function safeAddIndex(string $table, string $column): void
+    {
+        try {
+            if (!$this->hasIndex($table, $column)) {
+                Schema::table($table, function (Blueprint $table) use ($column) {
+                    $table->index($column);
+                });
+            }
+        } catch (\Exception $e) {
+            // Index might already exist, ignore the error
+            // This handles cases where the index was created by another migration
+            // or already exists in the database
+            if (strpos($e->getMessage(), 'Duplicate key name') === false && 
+                strpos($e->getMessage(), 'already exists') === false) {
+                // Re-throw if it's a different error
+                throw $e;
+            }
         }
     }
 
@@ -130,25 +112,55 @@ return new class extends Migration
     }
 
     /**
-     * Check if an index exists
+     * Check if an index exists for a column
      */
-    private function hasIndex(string $table, string $indexName): bool
+    private function hasIndex(string $table, string $column): bool
     {
         $connection = Schema::getConnection();
-        $databaseName = $connection->getDatabaseName();
+        $driver = $connection->getDriverName();
         
-        if ($connection->getDriverName() === 'sqlite') {
-            // SQLite doesn't support index checking the same way
-            return false;
+        // Generate expected index name (Laravel convention: table_column_index)
+        $indexName = "{$table}_{$column}_index";
+        
+        if ($driver === 'sqlite') {
+            // For SQLite, check if index exists by querying sqlite_master
+            try {
+                $result = $connection->select(
+                    "SELECT name FROM sqlite_master 
+                     WHERE type='index' AND name = ?",
+                    [$indexName]
+                );
+                return count($result) > 0;
+            } catch (\Exception $e) {
+                return false;
+            }
+        } elseif ($driver === 'mysql') {
+            // For MySQL, use information_schema
+            try {
+                $databaseName = $connection->getDatabaseName();
+                $result = $connection->select(
+                    "SELECT COUNT(*) as count FROM information_schema.statistics 
+                     WHERE table_schema = ? AND table_name = ? AND index_name = ?",
+                    [$databaseName, $table, $indexName]
+                );
+                return $result[0]->count > 0;
+            } catch (\Exception $e) {
+                return false;
+            }
+        } else {
+            // For PostgreSQL or other databases
+            try {
+                $databaseName = $connection->getDatabaseName();
+                $result = $connection->select(
+                    "SELECT COUNT(*) as count FROM pg_indexes 
+                     WHERE schemaname = ? AND tablename = ? AND indexname = ?",
+                    ['public', $table, $indexName]
+                );
+                return $result[0]->count > 0;
+            } catch (\Exception $e) {
+                return false;
+            }
         }
-        
-        $indexes = $connection->select(
-            "SELECT COUNT(*) as count FROM information_schema.statistics 
-             WHERE table_schema = ? AND table_name = ? AND index_name = ?",
-            [$databaseName, $table, $indexName]
-        );
-        
-        return $indexes[0]->count > 0;
     }
 };
 
