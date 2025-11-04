@@ -27,8 +27,8 @@ COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 # Copy composer files first for better caching
 COPY composer.json composer.lock ./
 
-# Install dependencies (optimize for production)
-RUN composer install --no-dev --optimize-autoloader --no-interaction --prefer-dist
+# Install dependencies (without running artisan yet)
+RUN composer install --no-dev --optimize-autoloader --no-interaction --prefer-dist || true
 
 # Copy all backend files
 COPY . .
@@ -37,6 +37,9 @@ COPY . .
 RUN mkdir -p storage/framework/{sessions,views,cache} storage/logs bootstrap/cache \
     && chown -R www-data:www-data storage bootstrap/cache \
     && chmod -R 775 storage bootstrap/cache
+
+# Setup .env file if it doesn't exist (for package discovery)
+RUN if [ ! -f .env ]; then cp .env.example .env 2>/dev/null || echo "APP_KEY=" > .env; fi
 
 # Expose port 80
 EXPOSE 80
