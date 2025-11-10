@@ -21,6 +21,11 @@ use App\Http\Controllers\Api\CpaLockerController;
 use App\Http\Controllers\Api\PaymentController;
 use App\Http\Controllers\Api\TrainingController;
 use App\Http\Controllers\Api\AdminTrainingModuleController;
+use App\Http\Controllers\Modules\Dropservicing\Controllers\DropservicingGigController;
+use App\Http\Controllers\Modules\Dropservicing\Controllers\DropservicingOrderController;
+use App\Http\Controllers\Modules\Dropservicing\Controllers\DropservicingMarketingPlanController;
+use App\Http\Controllers\Api\DropservicingServiceController;
+use App\Http\Controllers\Api\DropservicingOrderController as ApiDropservicingOrderController;
 
 // Health check endpoint
 Route::get('/health', function () {
@@ -135,6 +140,30 @@ Route::middleware(['auth:sanctum'])->group(function () {
         Route::post('/unlock/{id}', [TrainingController::class, 'unlock']);
         Route::post('/unlock', [TrainingController::class, 'unlockByBody']);
         Route::post('/complete', [TrainingController::class, 'complete']);
+    });
+
+    // Dropservicing (Gig-based system)
+    Route::prefix('dropservicing')->group(function () {
+        Route::apiResource('gigs', DropservicingGigController::class);
+        Route::post('orders', [DropservicingOrderController::class, 'store']);
+        Route::post('orders/{order}/fulfill', [DropservicingOrderController::class, 'fulfill']);
+        Route::get('orders', [DropservicingOrderController::class, 'index']);
+        
+        // Marketing Plans
+        Route::apiResource('marketing-plans', DropservicingMarketingPlanController::class);
+        Route::post('marketing-plans/{id}/regenerate', [DropservicingMarketingPlanController::class, 'regenerate']);
+    });
+
+    // Dropservicing Automation (Service Marketplace)
+    Route::prefix('dropservicing-automation')->group(function () {
+        // Public: List active services
+        Route::get('services', [DropservicingServiceController::class, 'index']);
+        Route::get('services/{service}', [DropservicingServiceController::class, 'show']);
+        
+        // User orders
+        Route::get('orders', [ApiDropservicingOrderController::class, 'index']);
+        Route::post('orders', [ApiDropservicingOrderController::class, 'store']);
+        Route::get('orders/{order}', [ApiDropservicingOrderController::class, 'show']);
     });
 
     // Landing Pages
@@ -252,6 +281,22 @@ Route::middleware(['auth:sanctum'])->group(function () {
             Route::put('/{module}', [AdminTrainingModuleController::class, 'update']);
             Route::delete('/{module}', [AdminTrainingModuleController::class, 'destroy']);
             Route::post('/generate/{networkId}', [AdminTrainingModuleController::class, 'generate']);
+        });
+
+        // Dropservicing Service Management
+        Route::prefix('dropservicing-services')->group(function () {
+            Route::get('/', [DropservicingServiceController::class, 'index']);
+            Route::post('/', [DropservicingServiceController::class, 'store']);
+            Route::get('/{service}', [DropservicingServiceController::class, 'show']);
+            Route::put('/{service}', [DropservicingServiceController::class, 'update']);
+            Route::delete('/{service}', [DropservicingServiceController::class, 'destroy']);
+        });
+
+        // Marketing Plans Management
+        Route::prefix('marketing-plans')->group(function () {
+            Route::get('/', [DropservicingMarketingPlanController::class, 'adminIndex']);
+            Route::get('/{id}', [DropservicingMarketingPlanController::class, 'adminShow']);
+            Route::post('/{id}/rerun', [DropservicingMarketingPlanController::class, 'adminRerun']);
         });
     });
 });

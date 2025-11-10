@@ -53,6 +53,10 @@ class AppServiceProvider extends ServiceProvider
             // Schedule auto-renewal job (runs every hour to check for due renewals)
             $schedule->job(new \App\Jobs\ProcessAutoRenewalJob())
                 ->hourly();
+            
+            // Schedule dropservicing gig auto-renewal (monthly on the 1st at 4:00 AM)
+            $schedule->command('dropservicing:renew-gigs')
+                ->monthlyOn(1, '04:00');
         });
     }
 }

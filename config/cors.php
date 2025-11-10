@@ -21,6 +21,7 @@ return [
 
     'allowed_origins' => array_filter([
         env('FRONTEND_URL', 'http://localhost:5173'),
+        'https://kenyanaffliate.netlify.app', // Explicit Netlify production URL
         'http://localhost:5173',
         'http://127.0.0.1:5173',
         'http://localhost:3000',
@@ -29,6 +30,8 @@ return [
     'allowed_origins_patterns' => [
         '#^https?://.*\.netlify\.app$#',
         '#^https?://.*\.netlify\.com$#',
+        '#^https?://.*\.vercel\.app$#', // Vercel deployments
+        '#^https?://.*\.vercel\.com$#',
     ],
 
     'allowed_headers' => ['*'],
